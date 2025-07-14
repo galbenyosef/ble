@@ -14,10 +14,14 @@ import {
 } from "react-native";
 import BLEScanner from "@/components/BLEScanner";
 import { SocketProvider, useSocket } from "@/components/SocketEmitter";
-import { BleManagerProvider } from "../components/BleManagerContext";
-import { BleManagerContext } from "../components/BleManagerContext";
+import {
+  BleManagerContext,
+  BleManagerProvider,
+} from "../components/BleManagerContext";
 
-const SOCKET_SERVER_URL = "http://10.0.0.23:3000"; // Change as needed
+const SOCKET_SERVER_URL = __DEV__
+  ? "http://localhost:3000"
+  : "https://ble-f760.onrender.com"; // Change as needed
 const ROOM = "shared-room";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
