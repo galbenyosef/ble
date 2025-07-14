@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -11,34 +11,52 @@ import {
 import { BleManager } from "react-native-ble-plx";
 
 const BLEScanner = ({ onDeviceSelect }) => {
-  const [manager] = useState(new BleManager());
+  const managerRef = useRef(null);
   const [devices, setDevices] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
+  const scanTimeout = useRef(null);
 
   useEffect(() => {
+    managerRef.current = new BleManager();
     return () => {
-      manager.destroy();
+      if (scanTimeout.current) clearTimeout(scanTimeout.current);
+      if (managerRef.current) {
+        managerRef.current.stopDeviceScan();
+        managerRef.current.destroy();
+      }
     };
-  }, [manager]);
+  }, []);
 
-  const startScan = () => {
+  const startScan = async () => {
+    if (managerRef.current) {
+      managerRef.current.stopDeviceScan(); // Always stop previous scan
+    }
     setDevices([]);
     setError(null);
     setScanning(true);
-    manager.startDeviceScan(null, null, (err, device) => {
+    managerRef.current.startDeviceScan(null, null, (err, device) => {
       if (err) {
         setError(err.message);
         setScanning(false);
         return;
       }
-      if (device && device.name && !devices.find((d) => d.id === device.id)) {
-        setDevices((prev) => [...prev, device]);
+      if (
+        device &&
+        device.id &&
+        device.name &&
+        device.id !== "unknown" &&
+        device.name !== "unknown"
+      ) {
+        setDevices((prev) => {
+          if (prev.find((d) => d.id === device.id)) return prev;
+          return [...prev, device];
+        });
       }
     });
     // Stop scan after 10 seconds
-    setTimeout(() => {
-      manager.stopDeviceScan();
+    scanTimeout.current = setTimeout(() => {
+      if (managerRef.current) managerRef.current.stopDeviceScan();
       setScanning(false);
     }, 10000);
   };
@@ -54,7 +72,9 @@ const BLEScanner = ({ onDeviceSelect }) => {
       {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
         data={devices}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) =>
+          item.id || item.name || Math.random().toString()
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.device}
