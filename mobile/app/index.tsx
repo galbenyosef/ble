@@ -6,15 +6,20 @@ import {
   Platform,
   PermissionsAndroid,
   Alert,
-  ScrollView,
+  View,
+  StyleSheet,
+  Dimensions,
+  ActivityIndicator,
+  FlatList,
 } from "react-native";
 import BLEScanner from "@/components/BLEScanner";
-import DeviceConnectionManager from "@/components/DeviceConnectionManager";
 import { SocketProvider, useSocket } from "@/components/SocketEmitter";
 import { BleManagerProvider } from "../components/BleManagerContext";
+import { BleManagerContext } from "../components/BleManagerContext";
 
 const SOCKET_SERVER_URL = "http://10.0.0.23:3000"; // Change as needed
 const ROOM = "shared-room";
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 async function requestBlePermissions() {
   if (Platform.OS === "android") {
@@ -54,48 +59,143 @@ async function requestBlePermissions() {
 }
 
 function BLEMainContent() {
-  const [connectedDevices, setConnectedDevices] = useState<any[]>([]);
-  const [deviceData, setDeviceData] = useState<{ [id: string]: any }>({});
+  const [devices, setDevices] = useState<any[]>([]);
   const [deviceStatus, setDeviceStatus] = useState<{ [id: string]: string }>(
     {}
   );
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [scanTrigger, setScanTrigger] = useState(0);
   const socket = useSocket();
+  const manager = React.useContext(BleManagerContext);
+  const monitorSubscriptions = React.useRef<{ [id: string]: any }>({});
 
   useEffect(() => {
     requestBlePermissions();
+    setScanTrigger((prev) => prev + 1); // Trigger initial scan on mount
+    return () => {
+      // Clean up all subscriptions on unmount
+      Object.values(monitorSubscriptions.current).forEach((sub) => {
+        if (sub && typeof sub.remove === "function") sub.remove();
+      });
+    };
   }, []);
 
-  const handleDeviceConnect = (device: any) => {
-    if (!connectedDevices.find((d) => d.id === device.id)) {
-      setConnectedDevices((prev) => [...prev, device]);
+  // Listen for devices from BLEScanner
+  const handleDevicesUpdate = (scannedDevices: any[]) => {
+    setDevices(scannedDevices);
+  };
+
+  const handleConnect = async (device: any) => {
+    if (
+      deviceStatus[device.id] === "connected" ||
+      deviceStatus[device.id] === "connecting"
+    )
+      return;
+    setConnectingId(device.id);
+    setDeviceStatus((prev) => ({ ...prev, [device.id]: "connecting" }));
+    try {
+      const connectedDevice = await manager.connectToDevice(device.id, {
+        autoConnect: true,
+      });
+      await connectedDevice.discoverAllServicesAndCharacteristics();
+      setDeviceStatus((prev) => ({ ...prev, [device.id]: "connected" }));
       socket.emitDeviceConnected(device);
-    }
-  };
-
-  const handleData = (deviceId: string, data: any) => {
-    setDeviceData((prev) => ({ ...prev, [deviceId]: data }));
-    const device = connectedDevices.find((d) => d.id === deviceId);
-    if (device) {
-      socket.emitDeviceData(device, data, "raw");
-    }
-  };
-
-  const handleStatusChange = (deviceId: string, status: string) => {
-    setDeviceStatus((prev) => ({ ...prev, [deviceId]: status }));
-    if (status === "disconnected") {
-      const device = connectedDevices.find((d) => d.id === deviceId);
-      if (device) {
-        socket.emitDeviceDisconnected(device);
-        setConnectedDevices((prev) => prev.filter((d) => d.id !== deviceId));
+      // Monitor first available characteristic
+      const allServices = await connectedDevice.services();
+      if (allServices.length > 0) {
+        const chars = await connectedDevice.characteristicsForService(
+          allServices[0].uuid
+        );
+        if (chars.length > 0) {
+          // Clean up previous subscription if any
+          if (monitorSubscriptions.current[device.id]) {
+            monitorSubscriptions.current[device.id].remove();
+          }
+          monitorSubscriptions.current[device.id] =
+            connectedDevice.monitorCharacteristicForService(
+              chars[0].serviceUUID,
+              chars[0].uuid,
+              (error, char) => {
+                if (error) {
+                  setDeviceStatus((prev) => ({
+                    ...prev,
+                    [device.id]: "error",
+                  }));
+                  return;
+                }
+                const value = char?.value;
+                // Emit device_data event
+                socket.emitDeviceData(device, value, "raw");
+              }
+            );
+        }
       }
+    } catch (err) {
+      setDeviceStatus((prev) => ({ ...prev, [device.id]: "disconnected" }));
+      Alert.alert("Connection Error", err?.message || String(err));
+    } finally {
+      setConnectingId(null);
     }
+  };
+
+  const handleDisconnect = async (device: any) => {
+    setDeviceStatus((prev) => ({ ...prev, [device.id]: "disconnecting" }));
+    try {
+      await manager.cancelDeviceConnection(device.id);
+      setDeviceStatus((prev) => ({ ...prev, [device.id]: "disconnected" }));
+      socket.emitDeviceDisconnected(device);
+      // Clean up subscription
+      if (monitorSubscriptions.current[device.id]) {
+        monitorSubscriptions.current[device.id].remove();
+        delete monitorSubscriptions.current[device.id];
+      }
+    } catch (err) {
+      Alert.alert("Disconnection Error", err?.message || String(err));
+    }
+  };
+
+  const handleScan = () => {
+    setScanTrigger((prev) => prev + 1);
+  };
+
+  const renderDevice = ({ item: device }: { item: any }) => {
+    const status = deviceStatus[device.id] || "disconnected";
+    return (
+      <View style={styles.deviceRowCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.deviceName}>{device.name}</Text>
+          <Text style={styles.deviceId}>{device.id}</Text>
+          <Text style={{ color: getStatusColor(status), fontWeight: "bold" }}>
+            {status === "connecting"
+              ? "Connecting..."
+              : status.charAt(0).toUpperCase() + status.slice(1)}
+          </Text>
+        </View>
+        {status === "connected" ? (
+          <Button
+            title="Disconnect"
+            onPress={() => handleDisconnect(device)}
+            color="#d9534f"
+            disabled={status === "disconnecting"}
+          />
+        ) : (
+          <Button
+            title={status === "connecting" ? "Connecting..." : "Connect"}
+            onPress={() => handleConnect(device)}
+            color="#007AFF"
+            disabled={status === "connecting" || connectingId !== null}
+          />
+        )}
+        {status === "connecting" && (
+          <ActivityIndicator size="small" style={{ marginLeft: 8 }} />
+        )}
+      </View>
+    );
   };
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <Text style={{ fontSize: 20, fontWeight: "bold", margin: 16 }}>
-        BLE Device Scanner
-      </Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f7f7f7" }}>
+      <Text style={styles.header}>BLE Device Scanner</Text>
       <Text
         style={{
           marginLeft: 16,
@@ -105,23 +205,98 @@ function BLEMainContent() {
       >
         Server: {socket.connected ? "Connected" : "Disconnected"}
       </Text>
-      <BLEScanner
-        onDeviceConnect={handleDeviceConnect}
-        connectedDeviceIds={connectedDevices.map((d) => d.id)}
-      />
-      <ScrollView>
-        {connectedDevices.map((device) => (
-          <DeviceConnectionManager
-            key={device.id}
-            device={device}
-            onData={(data) => handleData(device.id, data)}
-            onStatusChange={(status) => handleStatusChange(device.id, status)}
-          />
-        ))}
-      </ScrollView>
+      <View style={[styles.halfSection, { height: SCREEN_HEIGHT - 120 }]}>
+        {/* Single Card for All Devices */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Devices</Text>
+          <Button title="Scan for Devices" onPress={handleScan} />
+        </View>
+        <BLEScanner
+          onDevicesUpdate={handleDevicesUpdate}
+          scanTrigger={scanTrigger}
+        />
+        <FlatList
+          data={devices}
+          keyExtractor={(item) => item.id}
+          renderItem={renderDevice}
+          ListEmptyComponent={
+            <Text style={{ color: "#888", margin: 16 }}>No devices found.</Text>
+          }
+          style={{ marginTop: 8 }}
+        />
+      </View>
     </SafeAreaView>
   );
 }
+
+function getStatusColor(status?: string) {
+  if (status === "connected") return "green";
+  if (status === "reconnecting") return "orange";
+  if (status === "error") return "red";
+  if (status === "connecting") return "#007AFF";
+  return "#888";
+}
+
+const styles = StyleSheet.create({
+  header: {
+    fontSize: 24,
+    fontWeight: "bold",
+    margin: 16,
+    marginBottom: 0,
+    color: "#222",
+  },
+  halfSection: {
+    marginHorizontal: 12,
+    marginTop: 16,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    flexShrink: 1,
+    overflow: "hidden",
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  deviceRowCard: {
+    backgroundColor: "#f2f6fa",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  deviceId: {
+    fontSize: 14,
+    color: "#222",
+    marginBottom: 2,
+    fontWeight: "bold",
+  },
+  deviceName: {
+    fontWeight: "bold",
+    fontSize: 16,
+    marginBottom: 2,
+    color: "#222",
+  },
+});
 
 export default function MainScreen() {
   return (
