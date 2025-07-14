@@ -1,0 +1,19 @@
+%% System Architecture Diagram
+ graph TD;
+  A["Mobile App (React Native, Expo)"] -- BLE Scan/Connect --> B["BLE Devices"]
+  A -- Streams data via Socket.io --> C["Socket.io Server (Node.js, Express)"]
+  C -- Relays events --> D["Web App (React)"]
+  D -- Displays live device data --> E["User"]
+  A -- User interacts with app --> F["User"]
+  C -- Serves static web app --> D
+  subgraph BLE
+    B
+  end
+  subgraph Real-time
+    C
+    D
+  end
+  subgraph User
+    E
+    F
+  end 

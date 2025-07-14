@@ -1,21 +1,9 @@
 import React, { useEffect, useState, useRef, useContext } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-} from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 // import { BleManager } from "react-native-ble-plx";
 import { BleManagerContext } from "./BleManagerContext";
 
-const BLEScanner = ({
-  onDeviceConnect,
-  connectedDeviceIds = [],
-  scanTrigger,
-  onDevicesUpdate,
-}) => {
+const BLEScanner = ({ scanTrigger, onDevicesUpdate }) => {
   const manager = useContext(BleManagerContext);
   const [devices, setDevices] = useState([]);
   const [scanning, setScanning] = useState(false);
