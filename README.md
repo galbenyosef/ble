@@ -30,8 +30,6 @@ This project enables real-time monitoring of Bluetooth Low Energy (BLE) devices 
 - **Web App:** Displays live device status and data in real time, grouped by device.
 - **Server:** Relays events between mobile and web clients, and serves the web app for unified deployment.
 
-Assignment requirements and tasks are tracked in [`tasks/prd-bluetooth-websocket-integration.md`](tasks/prd-bluetooth-websocket-integration.md) and [`tasks/tasks-prd-bluetooth-websocket-integration.md`](tasks/tasks-prd-bluetooth-websocket-integration.md).
-
 ## Prerequisites
 
 - Node.js (v14–20 recommended; v22+ not fully supported by Express 4.x)
@@ -94,8 +92,8 @@ cd server
 node index.js
 ```
 
-- Server runs on `http://localhost:3000` by default.
-- The web app is now accessible at the same URL: `http://localhost:3000`.
+- Server runs on `https://ble-f760.onrender.com/` by default.
+- The web app is now accessible at the same URL:  `https://ble-f760.onrender.com/`.
 - All Socket.io and API traffic is handled by the same server, avoiding CORS issues.
 
 #### Start the Mobile App
