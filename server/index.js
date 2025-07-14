@@ -20,24 +20,30 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
+  console.log("[Socket.io] Client connected:", socket.id);
   let currentRoom = null;
   socket.on("join", (room) => {
     if (currentRoom) socket.leave(currentRoom);
     currentRoom = room;
     socket.join(room);
+    console.log(`[Socket.io] Client ${socket.id} joined room: ${room}`);
   });
 
   socket.on("device_connected", (data) => {
+    console.log("[Socket.io] device_connected:", data);
     if (data.room) io.to(data.room).emit("device_connected", data);
   });
   socket.on("device_data", (data) => {
+    console.log("[Socket.io] device_data:", data);
     if (data.room) io.to(data.room).emit("device_data", data);
   });
   socket.on("device_disconnected", (data) => {
+    console.log("[Socket.io] device_disconnected:", data);
     if (data.room) io.to(data.room).emit("device_disconnected", data);
   });
 
   socket.on("disconnect", () => {
+    console.log(`[Socket.io] Client disconnected: ${socket.id}`);
     // Optionally handle disconnect logic
   });
 });

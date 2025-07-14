@@ -1,15 +1,26 @@
-import React, { createContext, useContext, useEffect, useRef } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { io } from "socket.io-client";
 
 const SocketContext = createContext();
 
 export const SocketProvider = ({ serverUrl, room, children }) => {
   const socketRef = useRef(null);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     socketRef.current = io(serverUrl);
     socketRef.current.on("connect", () => {
+      setConnected(true);
       socketRef.current.emit("join", room);
+    });
+    socketRef.current.on("disconnect", () => {
+      setConnected(false);
     });
     return () => {
       socketRef.current.disconnect();
@@ -45,7 +56,12 @@ export const SocketProvider = ({ serverUrl, room, children }) => {
 
   return (
     <SocketContext.Provider
-      value={{ emitDeviceConnected, emitDeviceData, emitDeviceDisconnected }}
+      value={{
+        emitDeviceConnected,
+        emitDeviceData,
+        emitDeviceDisconnected,
+        connected,
+      }}
     >
       {children}
     </SocketContext.Provider>

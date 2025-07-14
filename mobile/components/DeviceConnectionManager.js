@@ -7,11 +7,7 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-// import { BleManager } from "react-native-ble-plx";
 import { BleManagerContext } from "./BleManagerContext";
-
-const SERVICE_UUID = "0000180d-0000-1000-8000-00805f9b34fb"; // Heart Rate Service (example)
-const CHARACTERISTIC_UUID = "00002a37-0000-1000-8000-00805f9b34fb"; // Heart Rate Measurement (example)
 
 const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
   const [status, setStatus] = useState("disconnected");
@@ -20,12 +16,14 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
   const [error, setError] = useState(null);
   const manager = useContext(BleManagerContext);
   const reconnectTimeout = useRef(null);
+  const monitorSubscription = useRef(null);
 
   useEffect(() => {
     if (!device) return;
     setConnecting(true);
     setStatus("connecting");
     setError(null);
+    setData(null);
     connectToDevice();
     return () => {
       cleanup();
@@ -42,7 +40,15 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
       setConnecting(false);
       onStatusChange && onStatusChange("connected");
       await connectedDevice.discoverAllServicesAndCharacteristics();
-      subscribeToData(connectedDevice);
+      const allServices = await connectedDevice.services();
+      if (allServices.length > 0) {
+        const chars = await device.characteristicsForService(
+          allServices[0].uuid
+        );
+        if (chars.length > 0) {
+          startMonitoring(chars[0]);
+        }
+      }
       connectedDevice.onDisconnected(() => {
         setStatus("disconnected");
         onStatusChange && onStatusChange("disconnected");
@@ -59,11 +65,16 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
     }
   };
 
-  const subscribeToData = (connectedDevice) => {
-    connectedDevice.monitorCharacteristicForService(
-      SERVICE_UUID,
-      CHARACTERISTIC_UUID,
-      (error, characteristic) => {
+  const startMonitoring = (characteristic) => {
+    setData(null);
+    if (monitorSubscription.current) {
+      monitorSubscription.current.remove();
+      monitorSubscription.current = null;
+    }
+    monitorSubscription.current = device.monitorCharacteristicForService(
+      characteristic.serviceUUID,
+      characteristic.uuid,
+      (error, char) => {
         if (error) {
           setStatus("error");
           setError(error?.message || String(error));
@@ -75,7 +86,7 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
           onStatusChange && onStatusChange("error");
           return;
         }
-        const value = characteristic?.value;
+        const value = char?.value;
         setData(value);
         onData && onData(value);
       }
@@ -93,6 +104,10 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
 
   const cleanup = () => {
     if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+    if (monitorSubscription.current) {
+      monitorSubscription.current.remove();
+      monitorSubscription.current = null;
+    }
     manager.cancelDeviceConnection(device.id).catch(() => {});
     // Do not destroy the manager, as it is shared
   };
@@ -104,8 +119,8 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
       </Text>
       <Text>Status: {status}</Text>
       {connecting && <ActivityIndicator style={{ margin: 10 }} />}
-      <Text>Data: {data ? data : "No data yet"}</Text>
       {error && <Text style={styles.error}>Error: {error}</Text>}
+      <Text>Data: {data ? data : "No data yet"}</Text>
       <Button
         title="Disconnect"
         onPress={cleanup}
@@ -122,6 +137,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccc",
     borderRadius: 8,
     margin: 16,
+    alignItems: "stretch",
   },
   title: { fontWeight: "bold", marginBottom: 8 },
   error: { color: "red", marginVertical: 8 },

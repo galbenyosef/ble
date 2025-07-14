@@ -11,7 +11,7 @@ import {
 // import { BleManager } from "react-native-ble-plx";
 import { BleManagerContext } from "./BleManagerContext";
 
-const BLEScanner = ({ onDeviceSelect }) => {
+const BLEScanner = ({ onDeviceConnect, connectedDeviceIds = [] }) => {
   const manager = useContext(BleManagerContext);
   const [devices, setDevices] = useState([]);
   const [scanning, setScanning] = useState(false);
@@ -73,14 +73,24 @@ const BLEScanner = ({ onDeviceSelect }) => {
           item.id || item.name || Math.random().toString()
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.device}
-            onPress={() => onDeviceSelect(item)}
-          >
-            <Text>
-              {item.name} ({item.id})
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.deviceRow}>
+            <TouchableOpacity
+              style={styles.device}
+              onPress={() => onDeviceConnect(item)}
+              disabled={connectedDeviceIds.includes(item.id)}
+            >
+              <Text>
+                {item.name} ({item.id})
+              </Text>
+            </TouchableOpacity>
+            <Button
+              title={
+                connectedDeviceIds.includes(item.id) ? "Connected" : "Connect"
+              }
+              onPress={() => onDeviceConnect(item)}
+              disabled={connectedDeviceIds.includes(item.id)}
+            />
+          </View>
         )}
         ListEmptyComponent={!scanning && <Text>No devices found.</Text>}
       />
@@ -90,7 +100,13 @@ const BLEScanner = ({ onDeviceSelect }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  device: { padding: 12, borderBottomWidth: 1, borderColor: "#ccc" },
+  deviceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  device: { padding: 12, borderBottomWidth: 1, borderColor: "#ccc", flex: 1 },
   error: { color: "red", marginVertical: 8 },
 });
 

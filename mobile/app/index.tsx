@@ -6,14 +6,14 @@ import {
   Platform,
   PermissionsAndroid,
   Alert,
-  View,
+  ScrollView,
 } from "react-native";
 import BLEScanner from "@/components/BLEScanner";
 import DeviceConnectionManager from "@/components/DeviceConnectionManager";
 import { SocketProvider, useSocket } from "@/components/SocketEmitter";
 import { BleManagerProvider } from "../components/BleManagerContext";
 
-const SOCKET_SERVER_URL = "http://localhost:3000"; // Change as needed
+const SOCKET_SERVER_URL = "http://10.0.0.23:3000"; // Change as needed
 const ROOM = "shared-room";
 
 async function requestBlePermissions() {
@@ -54,56 +54,72 @@ async function requestBlePermissions() {
 }
 
 function BLEMainContent() {
-  const [selectedDevice, setSelectedDevice] = useState<any>(null);
-  const [deviceData, setDeviceData] = useState<any>(null);
-  const [deviceStatus, setDeviceStatus] = useState<string>("disconnected");
+  const [connectedDevices, setConnectedDevices] = useState<any[]>([]);
+  const [deviceData, setDeviceData] = useState<{ [id: string]: any }>({});
+  const [deviceStatus, setDeviceStatus] = useState<{ [id: string]: string }>(
+    {}
+  );
   const socket = useSocket();
 
   useEffect(() => {
     requestBlePermissions();
   }, []);
 
-  const handleDeviceSelect = (device: any) => {
-    setSelectedDevice(device);
-    socket.emitDeviceConnected(device);
-  };
-
-  const handleData = (data: any) => {
-    setDeviceData(data);
-    if (selectedDevice) {
-      socket.emitDeviceData(selectedDevice, data, "raw");
+  const handleDeviceConnect = (device: any) => {
+    if (!connectedDevices.find((d) => d.id === device.id)) {
+      setConnectedDevices((prev) => [...prev, device]);
+      socket.emitDeviceConnected(device);
     }
   };
 
-  const handleStatusChange = (status: string) => {
-    setDeviceStatus(status);
-    if (status === "disconnected" && selectedDevice) {
-      socket.emitDeviceDisconnected(selectedDevice);
-      setSelectedDevice(null);
+  const handleData = (deviceId: string, data: any) => {
+    setDeviceData((prev) => ({ ...prev, [deviceId]: data }));
+    const device = connectedDevices.find((d) => d.id === deviceId);
+    if (device) {
+      socket.emitDeviceData(device, data, "raw");
+    }
+  };
+
+  const handleStatusChange = (deviceId: string, status: string) => {
+    setDeviceStatus((prev) => ({ ...prev, [deviceId]: status }));
+    if (status === "disconnected") {
+      const device = connectedDevices.find((d) => d.id === deviceId);
+      if (device) {
+        socket.emitDeviceDisconnected(device);
+        setConnectedDevices((prev) => prev.filter((d) => d.id !== deviceId));
+      }
     }
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }}>
       <Text style={{ fontSize: 20, fontWeight: "bold", margin: 16 }}>
         BLE Device Scanner
       </Text>
-      {!selectedDevice ? (
-        <BLEScanner onDeviceSelect={handleDeviceSelect} />
-      ) : (
-        <>
+      <Text
+        style={{
+          marginLeft: 16,
+          marginBottom: 8,
+          color: socket.connected ? "green" : "red",
+        }}
+      >
+        Server: {socket.connected ? "Connected" : "Disconnected"}
+      </Text>
+      <BLEScanner
+        onDeviceConnect={handleDeviceConnect}
+        connectedDeviceIds={connectedDevices.map((d) => d.id)}
+      />
+      <ScrollView>
+        {connectedDevices.map((device) => (
           <DeviceConnectionManager
-            device={selectedDevice}
-            onData={handleData}
-            onStatusChange={handleStatusChange}
+            key={device.id}
+            device={device}
+            onData={(data) => handleData(device.id, data)}
+            onStatusChange={(status) => handleStatusChange(device.id, status)}
           />
-          <Button
-            title="Back to Scanner"
-            onPress={() => setSelectedDevice(null)}
-          />
-        </>
-      )}
-    </View>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
