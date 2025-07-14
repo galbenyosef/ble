@@ -19,9 +19,7 @@ import {
   BleManagerProvider,
 } from "../components/BleManagerContext";
 
-const SOCKET_SERVER_URL = __DEV__
-  ? "http://localhost:3000"
-  : "https://ble-f760.onrender.com"; // Change as needed
+const SOCKET_SERVER_URL = "https://ble-f760.onrender.com"; // Change as needed
 const ROOM = "shared-room";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 

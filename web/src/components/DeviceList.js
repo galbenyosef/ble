@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 
-const SOCKET_SERVER_URL = "http://localhost:3000"; // Change as needed
+const SOCKET_SERVER_URL = "https://ble-f760.onrender.com"; // Change as needed
 const ROOM = "shared-room";
 
 const statusColors = {
