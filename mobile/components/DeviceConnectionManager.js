@@ -1,12 +1,14 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useContext } from "react";
 import {
   View,
   Text,
   Button,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from "react-native";
-import { BleManager } from "react-native-ble-plx";
+// import { BleManager } from "react-native-ble-plx";
+import { BleManagerContext } from "./BleManagerContext";
 
 const SERVICE_UUID = "0000180d-0000-1000-8000-00805f9b34fb"; // Heart Rate Service (example)
 const CHARACTERISTIC_UUID = "00002a37-0000-1000-8000-00805f9b34fb"; // Heart Rate Measurement (example)
@@ -15,13 +17,15 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
   const [status, setStatus] = useState("disconnected");
   const [data, setData] = useState(null);
   const [connecting, setConnecting] = useState(false);
-  const managerRef = useRef(new BleManager());
+  const [error, setError] = useState(null);
+  const manager = useContext(BleManagerContext);
   const reconnectTimeout = useRef(null);
 
   useEffect(() => {
     if (!device) return;
     setConnecting(true);
     setStatus("connecting");
+    setError(null);
     connectToDevice();
     return () => {
       cleanup();
@@ -31,10 +35,9 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
 
   const connectToDevice = async () => {
     try {
-      const connectedDevice = await managerRef.current.connectToDevice(
-        device.id,
-        { autoConnect: true }
-      );
+      const connectedDevice = await manager.connectToDevice(device.id, {
+        autoConnect: true,
+      });
       setStatus("connected");
       setConnecting(false);
       onStatusChange && onStatusChange("connected");
@@ -48,6 +51,9 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
     } catch (err) {
       setStatus("disconnected");
       setConnecting(false);
+      setError(err?.message || String(err));
+      console.error("BLE connection error:", err);
+      Alert.alert("BLE Connection Error", err?.message || String(err));
       onStatusChange && onStatusChange("disconnected");
       attemptReconnect();
     }
@@ -60,6 +66,12 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
       (error, characteristic) => {
         if (error) {
           setStatus("error");
+          setError(error?.message || String(error));
+          console.error("BLE subscription error:", error);
+          Alert.alert(
+            "BLE Subscription Error",
+            error?.message || String(error)
+          );
           onStatusChange && onStatusChange("error");
           return;
         }
@@ -81,8 +93,8 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
 
   const cleanup = () => {
     if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
-    managerRef.current.cancelDeviceConnection(device.id).catch(() => {});
-    managerRef.current.destroy();
+    manager.cancelDeviceConnection(device.id).catch(() => {});
+    // Do not destroy the manager, as it is shared
   };
 
   return (
@@ -93,6 +105,7 @@ const DeviceConnectionManager = ({ device, onData, onStatusChange }) => {
       <Text>Status: {status}</Text>
       {connecting && <ActivityIndicator style={{ margin: 10 }} />}
       <Text>Data: {data ? data : "No data yet"}</Text>
+      {error && <Text style={styles.error}>Error: {error}</Text>}
       <Button
         title="Disconnect"
         onPress={cleanup}
@@ -111,6 +124,7 @@ const styles = StyleSheet.create({
     margin: 16,
   },
   title: { fontWeight: "bold", marginBottom: 8 },
+  error: { color: "red", marginVertical: 8 },
 });
 
 export default DeviceConnectionManager;

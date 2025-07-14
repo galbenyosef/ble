@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useContext } from "react";
 import {
   View,
   Text,
@@ -8,34 +8,31 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from "react-native";
-import { BleManager } from "react-native-ble-plx";
+// import { BleManager } from "react-native-ble-plx";
+import { BleManagerContext } from "./BleManagerContext";
 
 const BLEScanner = ({ onDeviceSelect }) => {
-  const managerRef = useRef(null);
+  const manager = useContext(BleManagerContext);
   const [devices, setDevices] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
   const scanTimeout = useRef(null);
 
   useEffect(() => {
-    managerRef.current = new BleManager();
     return () => {
       if (scanTimeout.current) clearTimeout(scanTimeout.current);
-      if (managerRef.current) {
-        managerRef.current.stopDeviceScan();
-        managerRef.current.destroy();
-      }
+      if (manager) manager.stopDeviceScan();
     };
-  }, []);
+  }, [manager]);
 
   const startScan = async () => {
-    if (managerRef.current) {
-      managerRef.current.stopDeviceScan(); // Always stop previous scan
+    if (manager) {
+      manager.stopDeviceScan(); // Always stop previous scan
     }
     setDevices([]);
     setError(null);
     setScanning(true);
-    managerRef.current.startDeviceScan(null, null, (err, device) => {
+    manager.startDeviceScan(null, null, (err, device) => {
       if (err) {
         setError(err.message);
         setScanning(false);
@@ -56,7 +53,7 @@ const BLEScanner = ({ onDeviceSelect }) => {
     });
     // Stop scan after 10 seconds
     scanTimeout.current = setTimeout(() => {
-      if (managerRef.current) managerRef.current.stopDeviceScan();
+      if (manager) manager.stopDeviceScan();
       setScanning(false);
     }, 10000);
   };

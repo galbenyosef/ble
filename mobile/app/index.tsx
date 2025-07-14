@@ -6,10 +6,12 @@ import {
   Platform,
   PermissionsAndroid,
   Alert,
+  View,
 } from "react-native";
 import BLEScanner from "@/components/BLEScanner";
 import DeviceConnectionManager from "@/components/DeviceConnectionManager";
 import { SocketProvider, useSocket } from "@/components/SocketEmitter";
+import { BleManagerProvider } from "../components/BleManagerContext";
 
 const SOCKET_SERVER_URL = "http://localhost:3000"; // Change as needed
 const ROOM = "shared-room";
@@ -82,7 +84,7 @@ function BLEMainContent() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <Text style={{ fontSize: 20, fontWeight: "bold", margin: 16 }}>
         BLE Device Scanner
       </Text>
@@ -101,14 +103,16 @@ function BLEMainContent() {
           />
         </>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
 export default function MainScreen() {
   return (
-    <SocketProvider serverUrl={SOCKET_SERVER_URL} room={ROOM}>
-      <BLEMainContent />
-    </SocketProvider>
+    <BleManagerProvider>
+      <SocketProvider serverUrl={SOCKET_SERVER_URL} room={ROOM}>
+        <BLEMainContent />
+      </SocketProvider>
+    </BleManagerProvider>
   );
 }
