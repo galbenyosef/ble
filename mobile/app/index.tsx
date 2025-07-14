@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import BLEScanner from "@/components/BLEScanner";
 import { SocketProvider, useSocket } from "@/components/SocketEmitter";
+import { BleManager } from "react-native-ble-plx";
 import {
   BleManagerContext,
   BleManagerProvider,
@@ -68,7 +69,7 @@ function BLEMainContent() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [scanTrigger, setScanTrigger] = useState(0);
   const socket = useSocket();
-  const manager = React.useContext(BleManagerContext);
+  const manager = React.useContext(BleManagerContext) as BleManager | null;
   const monitorSubscriptions = React.useRef<{ [id: string]: any }>({});
 
   useEffect(() => {
@@ -88,6 +89,7 @@ function BLEMainContent() {
   };
 
   const handleConnect = async (device: any) => {
+    if (!manager) return;
     if (
       deviceStatus[device.id] === "connected" ||
       deviceStatus[device.id] === "connecting"
@@ -117,12 +119,17 @@ function BLEMainContent() {
             connectedDevice.monitorCharacteristicForService(
               chars[0].serviceUUID,
               chars[0].uuid,
-              (error, char) => {
+              (error: any, char: any) => {
                 if (error) {
-                  setDeviceStatus((prev) => ({
-                    ...prev,
-                    [device.id]: "error",
-                  }));
+                  setDeviceStatus((prev) => {
+                    const current = String(prev[device.id]);
+                    if (
+                      current === "disconnecting" ||
+                      current === "disconnected"
+                    )
+                      return prev;
+                    return { ...prev, [device.id]: "error" };
+                  });
                   return;
                 }
                 const value = char?.value;
@@ -132,7 +139,7 @@ function BLEMainContent() {
             );
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       setDeviceStatus((prev) => ({ ...prev, [device.id]: "disconnected" }));
       Alert.alert("Connection Error", err?.message || String(err));
     } finally {
@@ -141,6 +148,7 @@ function BLEMainContent() {
   };
 
   const handleDisconnect = async (device: any) => {
+    if (!manager) return;
     setDeviceStatus((prev) => ({ ...prev, [device.id]: "disconnecting" }));
     try {
       await manager.cancelDeviceConnection(device.id);
@@ -151,7 +159,7 @@ function BLEMainContent() {
         monitorSubscriptions.current[device.id].remove();
         delete monitorSubscriptions.current[device.id];
       }
-    } catch (err) {
+    } catch (err: any) {
       Alert.alert("Disconnection Error", err?.message || String(err));
     }
   };
